@@ -1,0 +1,13 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[dev-packages]
+grpcio-tools = "*"
+googleapis-common-protos = "*"
+
+[packages]
+
+[requires]
+python_version = "3.6"
