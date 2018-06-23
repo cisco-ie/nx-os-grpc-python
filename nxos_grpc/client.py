@@ -20,22 +20,26 @@ class Client(object):
         self.password = password
         self.timeout = timeout
     
-    def __gen_target(self, target):
+    def __gen_target(self, target, netloc_prefix='//', default_port=50051):
         """Parses and validates a supplied target URL for gRPC calls.
         Uses urllib to parse the netloc property from the URL.
         netloc property is, effectively, fqdn/hostname:port.
         This provides some level of URL validation and flexibility.
         Returns netloc property of target.
         """
-        netloc_prefix = '//'
         if netloc_prefix not in target:
             target = netloc_prefix + target
         parsed_target = parse.urlparse(target)
         if not parsed_target.netloc:
-            raise ValueError('Unable to parse netloc from supplied target URL!')
+            raise ValueError('Unable to parse netloc from target URL %s!', target)
         if parsed_target.scheme:
             logging.debug('Scheme identified in target, ignoring and using netloc.')
-        return parsed_target.netloc
+        target_netloc = parsed_target.netloc
+        if parsed_target.port is None:
+            ported_target = '%s:%i' % (parsed_target.hostname, default_port)
+            logging.debug('No target port detected, reassembled to %s.', ported_target)
+            target_netloc = self.__gen_target(ported_target)
+        return target_netloc
     
     def __gen_metadata(self):
         """Generates expected gRPC call metadata."""
