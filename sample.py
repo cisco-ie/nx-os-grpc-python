@@ -12,7 +12,18 @@ print(
         client.get_oper(
             'Cisco-NX-OS-device:System/nd-items/inst-items/dom-items/Dom-list/if-items/If-list/vaddrstat-items/VaddrStat-list',
             namespace='http://cisco.com/ns/yang/cisco-nx-os-device'
-        ),
+        ).as_dict(),
+        sort_keys=True,
+        indent=4
+    )
+)
+print(
+    json.dumps(
+        client.get(
+            'Cisco-NX-OS-device:System/nd-items/inst-items/dom-items/Dom-list/if-items/If-list/vaddrstat-items/VaddrStat-list',
+            namespace='http://cisco.com/ns/yang/cisco-nx-os-device',
+            reqid=1
+        ).as_dict(),
         sort_keys=True,
         indent=4
     )

@@ -5,6 +5,7 @@ import logging
 import json
 from urllib import parse
 import grpc
+from .response import build_response
 from . import proto
 
 class Client(object):
@@ -81,58 +82,64 @@ class Client(object):
         xpath_dict['namespace'] = namespace
         return json.dumps(xpath_dict)
 
-    def get_oper(self, datapath, namespace=None, reqid=0, datapath_is_payload=False):
+    def get_oper(self, yangpath, namespace=None, reqid=0, yangpath_is_payload=False):
         r"""Get operational data from device.
 
         Parameters
         ----------
-        datapath : str
+        yangpath : str
             YANG XPath which locates the datapoints.
         namespace : str, optional
             YANG namespace applicable to the specified XPath.
         reqid : { 0, +inf }, optional
             The request ID to indicate to the device.
-        datapath_is_payload : { True, False }, optional
-            Indicates that the datapath variable contains a preformed JSON
+        yangpath_is_payload : { True, False }, optional
+            Indicates that the yangpath parameter contains a preformed JSON
             payload and should not be parsed into JSON as an XPath.
         
         Returns
         -------
-        res_reqid : int
-            The request ID returned in the response.
-        res_yangdata : { dict, None }
-            The JSON-formed response data parsed into dict.
-        res_errors : { dict, None }
-            The JSON-formed response errors parsed into dict.
-        
-        Raises
-        ------
-        Exception
-            When request IDs do not match in request return chunks.
-        
-        Notes
-        -----
-        Decodes JSON data without strict parsing rules. May present some difficulties.
+        response : gRPCResponse
+            Response wrapper object with ReqID, YangData, and Errors fields.
         """
-        if not datapath_is_payload:
+        if not yangpath_is_payload:
             if not namespace:
                 raise Exception('Must include namespace if datapath is not payload.')
-            datapath = self.__parse_xpath_to_json(datapath, namespace)
-        message = proto.GetOperArgs(ReqID=reqid, YangPath=datapath)
+            yangpath = self.__parse_xpath_to_json(yangpath, namespace)
+        message = proto.GetOperArgs(ReqID=reqid, YangPath=yangpath)
         responses = self.__client.GetOper(message,
             timeout=self.timeout,
             metadata=self.__gen_metadata()
         )
-        res_reqid = None
-        res_yangdata = ''
-        res_errors = ''
-        for response in responses:
-            if res_reqid is None:
-                res_reqid = response.ReqID
-            elif res_reqid != response.ReqID:
-                raise Exception('ReqIDs in response stream do not match!')
-            res_yangdata += response.YangData
-            res_errors += response.Errors
-        res_yangdata = json.loads(res_yangdata, strict=False) if res_yangdata else None
-        res_errors = json.loads(res_errors, strict=False) if res_errors else None
-        return res_reqid, res_yangdata, res_errors
+        return build_response(reqid, responses)
+
+    def get(self, yangpath, namespace=None, reqid=0, yangpath_is_payload=False):
+        r"""Get configuration and operational data from device.
+
+        Parameters
+        ----------
+        yangpath : str
+            YANG XPath which locates the datapoints.
+        namespace : str, optional
+            YANG namespace applicable to the specified XPath.
+        reqid : { 0, +inf }, optional
+            The request ID to indicate to the device.
+        yangpath_is_payload : { True, False }, optional
+            Indicates that the yangpath parameter contains a preformed JSON
+            payload and should not be parsed into JSON as an XPath.
+        
+        Returns
+        -------
+        response : gRPCResponse
+            Response wrapper object with ReqID, YangData, and Errors fields.
+        """
+        if not yangpath_is_payload:
+            if not namespace:
+                raise Exception('Must include namespace if datapath is not payload.')
+            yangpath = self.__parse_xpath_to_json(yangpath, namespace)
+        message = proto.GetArgs(ReqID=reqid, YangPath=yangpath)
+        responses = self.__client.Get(message,
+            timeout=self.timeout,
+            metadata=self.__gen_metadata()
+        )
+        return build_response(reqid, responses)
