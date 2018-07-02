@@ -104,7 +104,7 @@ class Client(object):
         """
         if not yangpath_is_payload:
             if not namespace:
-                raise Exception('Must include namespace if datapath is not payload.')
+                raise Exception('Must include namespace if yangpath is not payload.')
             yangpath = self.__parse_xpath_to_json(yangpath, namespace)
         message = proto.GetOperArgs(ReqID=reqid, YangPath=yangpath)
         responses = self.__client.GetOper(message,
@@ -135,10 +135,43 @@ class Client(object):
         """
         if not yangpath_is_payload:
             if not namespace:
-                raise Exception('Must include namespace if datapath is not payload.')
+                raise Exception('Must include namespace if yangpath is not payload.')
             yangpath = self.__parse_xpath_to_json(yangpath, namespace)
         message = proto.GetArgs(ReqID=reqid, YangPath=yangpath)
         responses = self.__client.Get(message,
+            timeout=self.timeout,
+            metadata=self.__gen_metadata()
+        )
+        return build_response(reqid, responses)
+
+    def get_config(self, yangpath, namespace=None, reqid=0, source='running', yangpath_is_payload=False):
+        r"""Get configuration data from device.
+
+        Parameters
+        ----------
+        yangpath : str
+            YANG XPath which locates the datapoints.
+        namespace : str, optional
+            YANG namespace applicable to the specified XPath.
+        reqid : { 0, +inf }, optional
+            The request ID to indicate to the device.
+        source : { 'running', ? }, optional
+            Source to retrieve configuration from.
+        yangpath_is_payload : { True, False }, optional
+            Indicates that the yangpath parameter contains a preformed JSON
+            payload and should not be parsed into JSON as an XPath.
+        
+        Returns
+        -------
+        response : gRPCResponse
+            Response wrapper object with ReqID, YangData, and Errors fields.
+        """
+        if not yangpath_is_payload:
+            if not namespace:
+                raise Exception('Must include namespace if yangpath is not payload.')
+            yangpath = self.__parse_xpath_to_json(yangpath, namespace)
+        message = proto.GetConfigArgs(ReqID=reqid, Source=source, YangPath=yangpath)
+        responses = self.__client.GetConfig(message,
             timeout=self.timeout,
             metadata=self.__gen_metadata()
         )
