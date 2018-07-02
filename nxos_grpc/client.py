@@ -1,4 +1,8 @@
+"""NX-OS gRPC Python wrapper library.
+Function usage derived from example NX-OS client from BU (thanks! :)).
+"""
 import logging
+import json
 from urllib import parse
 import grpc
 from . import proto
@@ -18,7 +22,7 @@ class Client(object):
         self.__client = self.__gen_client(target)
         self.username = username
         self.password = password
-        self.timeout = timeout
+        self.timeout = int(timeout)
     
     def __gen_target(self, target, netloc_prefix='//', default_port=50051):
         """Parses and validates a supplied target URL for gRPC calls.
@@ -61,16 +65,50 @@ class Client(object):
             raise NotImplementedError('Secure channel not yet implemented!')
         return client
 
-    def get_oper(self, datapath):
-        """Adapted from IOS XR gRPC client for testing."""
-        message = proto.GetOperArgs(YangPath=datapath)
+    def __parse_xpath_to_json(self, xpath, namespace):
+        """Parses an XPath to JSON representation, and appends
+        namespace into the JSON request.
+        """
+        xpath_dict = {}
+        xpath_split = xpath.split('/')
+        first = True
+        for element in reversed(xpath_split):
+            if first:
+                xpath_dict[element] = {}
+                first = False
+            else:
+                xpath_dict = {element: xpath_dict}
+        xpath_dict['namespace'] = namespace
+        return json.dumps(xpath_dict)
+
+    def get_oper(self, datapath, namespace=None, reqid=0, datapath_is_payload=False):
+        if not datapath_is_payload:
+            if not namespace:
+                raise Exception('Must include namespace if datapath is not payload.')
+            datapath = self.__parse_xpath_to_json(datapath, namespace)
+        message = proto.GetOperArgs(ReqID=reqid, YangPath=datapath)
         responses = self.__client.GetOper(message,
             timeout=self.timeout,
             metadata=self.__gen_metadata()
         )
-        output = ''
-        error = ''
+        response_struct = {
+            'ReqID': None,
+            'YangData': '',
+            'Errors': ''
+        }
         for response in responses:
-            output += response.yangjson
-            error += response.errors
-        return error, output
+            if response_struct['ReqID'] is None:
+                response_struct['ReqID'] = response.ReqID
+            elif response_struct['ReqID'] != response.ReqID:
+                raise Exception('ReqIDs in response stream do not match!')
+            response_struct['YangData'] += response.YangData
+            response_struct['Errors'] += response.Errors
+        if response_struct['YangData']:
+            response_struct['YangData'] = json.loads(response_struct['YangData'])
+        else:
+            response_struct['YangData'] = None
+        if response_struct['Errors']:
+            response_struct['Errors'] = json.loads(response_struct['Errors'])
+        else:
+            response_struct['Errors'] = None
+        return response_struct
