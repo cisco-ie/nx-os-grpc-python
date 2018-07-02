@@ -82,6 +82,38 @@ class Client(object):
         return json.dumps(xpath_dict)
 
     def get_oper(self, datapath, namespace=None, reqid=0, datapath_is_payload=False):
+        r"""Get operational data from device.
+
+        Parameters
+        ----------
+        datapath : str
+            YANG XPath which locates the datapoints.
+        namespace : str, optional
+            YANG namespace applicable to the specified XPath.
+        reqid : { 0, +inf }, optional
+            The request ID to indicate to the device.
+        datapath_is_payload : { True, False }, optional
+            Indicates that the datapath variable contains a preformed JSON
+            payload and should not be parsed into JSON as an XPath.
+        
+        Returns
+        -------
+        res_reqid : int
+            The request ID returned in the response.
+        res_yangdata : { dict, None }
+            The JSON-formed response data parsed into dict.
+        res_errors : { dict, None }
+            The JSON-formed response errors parsed into dict.
+        
+        Raises
+        ------
+        Exception
+            When request IDs do not match in request return chunks.
+        
+        Notes
+        -----
+        Decodes JSON data without strict parsing rules. May present some difficulties.
+        """
         if not datapath_is_payload:
             if not namespace:
                 raise Exception('Must include namespace if datapath is not payload.')
@@ -91,24 +123,16 @@ class Client(object):
             timeout=self.timeout,
             metadata=self.__gen_metadata()
         )
-        response_struct = {
-            'ReqID': None,
-            'YangData': '',
-            'Errors': ''
-        }
+        res_reqid = None
+        res_yangdata = ''
+        res_errors = ''
         for response in responses:
-            if response_struct['ReqID'] is None:
-                response_struct['ReqID'] = response.ReqID
-            elif response_struct['ReqID'] != response.ReqID:
+            if res_reqid is None:
+                res_reqid = response.ReqID
+            elif res_reqid != response.ReqID:
                 raise Exception('ReqIDs in response stream do not match!')
-            response_struct['YangData'] += response.YangData
-            response_struct['Errors'] += response.Errors
-        if response_struct['YangData']:
-            response_struct['YangData'] = json.loads(response_struct['YangData'])
-        else:
-            response_struct['YangData'] = None
-        if response_struct['Errors']:
-            response_struct['Errors'] = json.loads(response_struct['Errors'])
-        else:
-            response_struct['Errors'] = None
-        return response_struct
+            res_yangdata += response.YangData
+            res_errors += response.Errors
+        res_yangdata = json.loads(res_yangdata, strict=False) if res_yangdata else None
+        res_errors = json.loads(res_errors, strict=False) if res_errors else None
+        return res_reqid, res_yangdata, res_errors
