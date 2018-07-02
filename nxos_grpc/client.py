@@ -1,5 +1,6 @@
 """NX-OS gRPC Python wrapper library.
 Function usage derived from example NX-OS client from BU (thanks! :)).
+TODO: Write session state management wrapper.
 """
 import logging
 import json
@@ -82,19 +83,19 @@ class Client(object):
         xpath_dict['namespace'] = namespace
         return json.dumps(xpath_dict)
 
-    def get_oper(self, yangpath, namespace=None, reqid=0, yangpath_is_payload=False):
+    def get_oper(self, yang_path, namespace=None, request_id=0, path_is_payload=False):
         r"""Get operational data from device.
 
         Parameters
         ----------
-        yangpath : str
+        yang_path : str
             YANG XPath which locates the datapoints.
         namespace : str, optional
             YANG namespace applicable to the specified XPath.
-        reqid : { 0, +inf }, optional
+        request_id : { 0, +inf }, optional
             The request ID to indicate to the device.
-        yangpath_is_payload : { True, False }, optional
-            Indicates that the yangpath parameter contains a preformed JSON
+        path_is_payload : { True, False }, optional
+            Indicates that the yang_path parameter contains a preformed JSON
             payload and should not be parsed into JSON as an XPath.
         
         Returns
@@ -102,30 +103,30 @@ class Client(object):
         response : gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
-        if not yangpath_is_payload:
+        if not path_is_payload:
             if not namespace:
-                raise Exception('Must include namespace if yangpath is not payload.')
-            yangpath = self.__parse_xpath_to_json(yangpath, namespace)
-        message = proto.GetOperArgs(ReqID=reqid, YangPath=yangpath)
+                raise Exception('Must include namespace if yang_path is not payload.')
+            yang_path = self.__parse_xpath_to_json(yang_path, namespace)
+        message = proto.GetOperArgs(ReqID=request_id, YangPath=yang_path)
         responses = self.__client.GetOper(message,
             timeout=self.timeout,
             metadata=self.__gen_metadata()
         )
-        return build_response(reqid, responses)
+        return build_response(request_id, responses)
 
-    def get(self, yangpath, namespace=None, reqid=0, yangpath_is_payload=False):
+    def get(self, yang_path, namespace=None, request_id=0, path_is_payload=False):
         r"""Get configuration and operational data from device.
 
         Parameters
         ----------
-        yangpath : str
+        yang_path : str
             YANG XPath which locates the datapoints.
         namespace : str, optional
             YANG namespace applicable to the specified XPath.
-        reqid : { 0, +inf }, optional
+        request_id : { 0, +inf }, optional
             The request ID to indicate to the device.
-        yangpath_is_payload : { True, False }, optional
-            Indicates that the yangpath parameter contains a preformed JSON
+        path_is_payload : { True, False }, optional
+            Indicates that the yang_path parameter contains a preformed JSON
             payload and should not be parsed into JSON as an XPath.
         
         Returns
@@ -133,46 +134,165 @@ class Client(object):
         response : gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
-        if not yangpath_is_payload:
+        if not path_is_payload:
             if not namespace:
                 raise Exception('Must include namespace if yangpath is not payload.')
-            yangpath = self.__parse_xpath_to_json(yangpath, namespace)
-        message = proto.GetArgs(ReqID=reqid, YangPath=yangpath)
+            yang_path = self.__parse_xpath_to_json(yang_path, namespace)
+        message = proto.GetArgs(ReqID=request_id, YangPath=yang_path)
         responses = self.__client.Get(message,
             timeout=self.timeout,
             metadata=self.__gen_metadata()
         )
-        return build_response(reqid, responses)
+        return build_response(request_id, responses)
 
-    def get_config(self, yangpath, namespace=None, reqid=0, source='running', yangpath_is_payload=False):
+    def get_config(self, yang_path, namespace=None, request_id=0,
+            source='running', path_is_payload=False
+        ):
         r"""Get configuration data from device.
 
         Parameters
         ----------
-        yangpath : str
+        yang_path : str
             YANG XPath which locates the datapoints.
         namespace : str, optional
             YANG namespace applicable to the specified XPath.
-        reqid : { 0, +inf }, optional
+        request_id : { 0, +inf }, optional
             The request ID to indicate to the device.
         source : { 'running', ? }, optional
             Source to retrieve configuration from.
-        yangpath_is_payload : { True, False }, optional
-            Indicates that the yangpath parameter contains a preformed JSON
+        path_is_payload : { True, False }, optional
+            Indicates that the yang_path parameter contains a preformed JSON
             payload and should not be parsed into JSON as an XPath.
         
         Returns
         -------
         response : gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
+        
+        Notes
+        -----
+        Need to verify whether source param may be something other than running.
         """
-        if not yangpath_is_payload:
+        if not path_is_payload:
             if not namespace:
-                raise Exception('Must include namespace if yangpath is not payload.')
-            yangpath = self.__parse_xpath_to_json(yangpath, namespace)
-        message = proto.GetConfigArgs(ReqID=reqid, Source=source, YangPath=yangpath)
+                raise Exception('Must include namespace if yang_path is not payload.')
+            yang_path = self.__parse_xpath_to_json(yang_path, namespace)
+        message = proto.GetConfigArgs(ReqID=request_id, Source=source, YangPath=yang_path)
         responses = self.__client.GetConfig(message,
             timeout=self.timeout,
             metadata=self.__gen_metadata()
         )
-        return build_response(reqid, responses)
+        return build_response(request_id, responses)
+
+    def edit_config(self, yang_path,
+            operation='merge', default_operation='merge', session_id=0,
+            request_id=0, target='running', error_operation='roll-back'
+        ):
+        r"""Writes the specified YANG data subset to the target datastore.
+
+        Parameters
+        ----------
+        yang_path : str
+            JSON-encoded YANG data to be edited.
+        operation : { 'merge', 'create', 'replace', 'delete', 'remove' }, optional
+            Operation to perform on the configuration datastore.
+        default_operation : { 'merge', 'replace', 'none' }, optional
+            Default operation while traversing the configuration tree.
+        session_id : { 0, +inf }, optional
+            Unique session ID acquired from start_session.
+            0 indicates stateless operation.
+        request_id : { 0, +inf }, optional
+            The request ID to indicate to the device.
+        target : { 'running' }, optional
+            Target datastore. Only 'running' is supported.
+        error_operation : { 'roll-back', 'stop', 'continue' }, optional
+            Action to be preformed in the event of an error.
+        
+        Returns
+        -------
+        response : gRPCResponse
+            Response wrapper object with ReqID, YangData, and Errors fields.
+        """
+        message = proto.EditConfigArgs(
+            YangPath=yang_path, Operation=operation, SessionID=session_id, ReqID=request_id,
+            Target=target, DefOp=default_operation, ErrorOp=error_operation)
+        responses = self.__client.EditConfig(message,
+            timeout=self.timeout,
+            metadata=self.__gen_metadata()
+        )
+        return build_response(request_id, responses)
+
+    def start_session(self, request_id=0):
+        r"""Starts a new session acquiring a session ID.
+
+        Parameters
+        ----------
+        request_id : int, optional
+            The request ID to indicate to the device.
+        
+        Returns
+        -------
+        response : gRPCResponse
+            Response wrapper object with ReqID, YangData, and Errors fields.
+        """
+        message = proto.SessionArgs(ReqID=request_id)
+        responses = self.__client.StartSession(message,
+            timeout=self.timeout,
+            metadata=self.__gen_metadata()
+        )
+        return build_response(request_id, responses)
+
+    def close_session(self, session_id, request_id=0):
+        r"""Requests graceful termination of a session.
+
+        Parameters
+        ----------
+        session_id : { 0, +inf }
+            Unique session ID acquired from starting a session.
+        request_id : { 0, +inf }, optional
+            The request ID to indicate to the device.
+
+        Returns
+        -------
+        response : gRPCResponse
+            Response wrapper object with ReqID, YangData, and Errors fields.
+        """
+        message = proto.CloseSessionArgs(ReqID=request_id, SessionID=session_id)
+        responses = self.__client.CloseSession(message,
+            timeout=self.timeout,
+            metadata=self.__gen_metadata()
+        )
+        return build_response(request_id, responses)
+
+    def kill_session(self, session_id, session_id_to_kill, request_id=0):
+        r"""Forces the closing of a session.
+
+        Parameters
+        ----------
+        session_id : { 0, +inf }
+            Unique session ID acquired from starting a session.
+        session_id_to_kill : { 0, +inf }
+            Unique session ID to kill.
+        request_id : { 0, +inf }, optional
+            The request ID to indicate to the device.
+        
+        Returns
+        -------
+        response : gRPCResponse
+            Response wrapper object with ReqID, YangData, and Errors fields.
+        
+        Notes
+        -----
+        Not verified on whether we need to open a new session to kill a session.
+        """
+        message = proto.KillArgs(
+            ReqID=request_id,
+            SessionID=session_id,
+            SessionIDToKill=session_id_to_kill
+        )
+        responses = self.__client.KillSession(
+            message,
+            timeout=self.timeout,
+            metadata=self.__gen_metadata()
+        )
+        return build_response(request_id, responses)

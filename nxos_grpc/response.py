@@ -1,4 +1,12 @@
+"""Generic response wrapper class.
+All responses follow the same data return format,
+so generalizing the data return structure. Formalizes
+the requirement to consume chunks until the object is fully
+formed and then when finalizes exposes dict encodings of the
+YangData and Errors data.
+"""
 import json
+
 
 def build_response(reqid, response_stream):
     r"""Build a gRPCResponse from response stream.

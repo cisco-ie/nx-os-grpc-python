@@ -22,7 +22,7 @@ print(
         client.get(
             'Cisco-NX-OS-device:System/nd-items/inst-items/dom-items/Dom-list/if-items/If-list/vaddrstat-items/VaddrStat-list',
             namespace='http://cisco.com/ns/yang/cisco-nx-os-device',
-            reqid=1
+            request_id=1
         ).as_dict(),
         sort_keys=True,
         indent=4
@@ -33,7 +33,7 @@ print(
         client.get_config(
             'Cisco-NX-OS-device:System/nd-items/inst-items/dom-items/Dom-list/if-items/If-list/vaddrstat-items/VaddrStat-list',
             namespace='http://cisco.com/ns/yang/cisco-nx-os-device',
-            reqid=2
+            request_id=2
         ).as_dict(),
         sort_keys=True,
         indent=4
