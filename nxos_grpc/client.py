@@ -44,7 +44,7 @@ class Client(object):
     def __gen_metadata(self):
         """Generates expected gRPC call metadata."""
         return [
-            ('user', self.username),
+            ('username', self.username),
             ('password', self.password)
         ]
     
@@ -61,7 +61,6 @@ class Client(object):
             raise NotImplementedError('Secure channel not yet implemented!')
         return client
 
-    
     def get_oper(self, datapath):
         """Adapted from IOS XR gRPC client for testing."""
         message = proto.GetOperArgs(YangPath=datapath)
