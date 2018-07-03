@@ -1,6 +1,7 @@
 """NX-OS gRPC Python wrapper library.
 Function usage derived from example NX-OS client from BU (thanks! :)).
 TODO: Write session state management wrapper.
+TODO: Exception classes.
 """
 import logging
 import json
@@ -17,11 +18,38 @@ class Client(object):
     """
     __C_MAX_LONG=2147483647
 
-    def __init__(self, target, username, password, timeout=__C_MAX_LONG):
-        """Initializes the gRPC client stub and defines authentication
-        and timeout attributes. Timeout defaults to "infinity".
+    def __init__(self, target, username, password, timeout=__C_MAX_LONG,
+            credentials=None, credentials_from_file=True, tls_server_override=None
+        ):
+        """Initializes the gRPC client stub and defines authentication and timeout attributes.
+
+        Parameters
+        ----------
+        target : str
+            The host[:port] to issue gRPC requests against.
+        username : str
+        password : str
+        timeout : { 0, Maximum C Integer Value }, optional
+            Timeout for request which sets a deadline for return.
+        credentials : str, optional
+            PEM file path or PEM file contents.
+        tls_server_override : str, optional
+            TLS server name if desired.
+        credentials_from_file : { True, False }, optional
+            Indicates that credentials is a file path.
+        
+        Notes
+        -----
+        Client building might be revisited.
         """
-        self.__client = self.__gen_client(target)
+        self.__client = self.__gen_client(
+            target,
+            credentials=self.__gen_creds(
+                credentials, credentials_from_file
+            ),
+            options=(('grpc.ssl_target_name_override', tls_server_override,),)
+                if tls_server_override else None
+        )
         self.username = username
         self.password = password
         self.timeout = int(timeout)
@@ -54,18 +82,32 @@ class Client(object):
             ('password', self.password)
         ]
     
-    def __gen_client(self, target, secure=False):
+    def __gen_client(self, target, credentials=None, options=None):
         """Instantiates and returns the NX-OS gRPC client stub
         over an insecure or secure channel. Validates target.
         """
         target = self.__gen_target(target)
         client = None
-        if not secure:
+        if not credentials:
             insecure_channel = grpc.insecure_channel(target)
             client = proto.gRPCConfigOperStub(insecure_channel)
         else:
-            raise NotImplementedError('Secure channel not yet implemented!')
+            channel_creds = grpc.ssl_channel_credentials(credentials)
+            secure_channel = grpc.secure_channel(target, channel_creds, options)
+            client = proto.gRPCConfigOperStub(secure_channel)
         return client
+    
+    def __gen_creds(self, creds, creds_from_file=False):
+        """Generate credentials either by reading credentials from
+        the specified file or return the original creds specified.
+        """
+        ret_creds = None
+        if creds_from_file:
+            with open(creds, 'rb') as cred_fd:
+                ret_creds = cred_fd.read()
+        else:
+            ret_creds = creds
+        return ret_creds
 
     def __parse_xpath_to_json(self, xpath, namespace):
         """Parses an XPath to JSON representation, and appends
