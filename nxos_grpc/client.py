@@ -1,16 +1,67 @@
 """NX-OS gRPC Python wrapper library.
 Function usage derived from example NX-OS client from BU (thanks! :)).
 TODO: Write session state management wrapper.
+TODO: Make individual returns more useful?
 TODO: Exception classes.
 """
 import logging
 import json
-from urllib import parse
 import grpc
 from .response import build_response
 from . import proto
 
+"""Enable urllib compatibility for Python2/3 support."""
+from future.standard_library import install_aliases
+install_aliases()
+from urllib import parse
+
+
+
 class Client(object):
+    """NX-OS gRPC wrapper client to ease usage of gRPC.
+    
+    Returns relatively raw response data. Response data may be accessed
+    via the ReqID, YangData, and Errors attributes/items.
+
+    Attributes
+    ----------
+    username : str
+    password : str
+    timeout : uint
+
+    Methods
+    -------
+    get(...)
+        Get oper and config data.
+    get_config(...)
+        Get only config data.
+    get_oper(...)
+        Get only oper data.
+    edit_config(...)
+        Edit running config.
+    start_session(...)
+        Start stateful session for editing config, etc.
+    close_session(...)
+        Gracefully close stateful session.
+    kill_session(...)
+        Forcefully terminate stateful session.
+    
+    Examples
+    --------
+    >>> from nxos_grpc import Client
+    >>> client = Client('127.0.0.1', 'demo', 'demo')
+    >>> oper_response = client.get_oper('Cisco-NX-OS-device:System',
+    ...     namespace='http://cisco.com/ns/yang/cisco-nx-os-device'
+    ... )
+    >>> oper_response.YangData
+    ...
+    >>> oper_response['YangData']
+    ...
+    >>> oper_response
+    <nxos_grpc.response.gRPCResponse object at 0x10ebcbe80>
+    >>> oper_response.as_dict()
+    ...
+    """
 
     """Defining property due to gRPC timeout being based on a C long type.
     Should really define this based on architecture.
@@ -19,7 +70,7 @@ class Client(object):
     __C_MAX_LONG=2147483647
 
     def __init__(self, target, username, password, timeout=__C_MAX_LONG,
-            credentials=None, credentials_from_file=True, tls_server_override=None
+            credentials=None, credentials_from_file=False, tls_server_override=None
         ):
         """Initializes the gRPC client stub and defines authentication and timeout attributes.
 
@@ -42,17 +93,29 @@ class Client(object):
         -----
         Client building might be revisited.
         """
-        self.__client = self.__gen_client(
-            target,
-            credentials=self.__gen_creds(
-                credentials, credentials_from_file
-            ),
-            options=(('grpc.ssl_target_name_override', tls_server_override,),)
-                if tls_server_override else None
+        self.__target = self.__gen_target(target)
+        self.__is_secure = True if credentials else False
+        self.__credentials = self.__gen_credentials(
+            credentials, credentials_from_file
         )
+        self.__options = self.__gen_options(tls_server_override)
         self.username = username
         self.password = password
         self.timeout = int(timeout)
+        self.__client = self.__gen_client(
+            self.__target,
+            self.__credentials,
+            self.__options
+        )
+    
+    def __repr__(self):
+        return json.dumps({
+            'target': self.__target,
+            'is_secure': self.__is_secure,
+            'username': self.username,
+            'password': self.password,
+            'timeout': self.timeout
+        })
     
     def __gen_target(self, target, netloc_prefix='//', default_port=50051):
         """Parses and validates a supplied target URL for gRPC calls.
@@ -97,17 +160,27 @@ class Client(object):
             client = proto.gRPCConfigOperStub(secure_channel)
         return client
     
-    def __gen_creds(self, creds, creds_from_file=False):
+    def __gen_credentials(self, credentials, credentials_from_file=False):
         """Generate credentials either by reading credentials from
         the specified file or return the original creds specified.
         """
-        ret_creds = None
-        if creds_from_file:
-            with open(creds, 'rb') as cred_fd:
-                ret_creds = cred_fd.read()
-        else:
-            ret_creds = creds
-        return ret_creds
+        if not credentials:
+            return None
+        if credentials_from_file:
+            with open(credentials, 'rb') as creds_fd:
+                credentials = creds_fd.read()
+        return credentials
+    
+    def __gen_options(self, tls_server_override):
+        """Generate options tuple for gRPC overrides, etc.
+        Only TLS server is handled currently.
+        """
+        options = []
+        if tls_server_override:
+            options.append(
+                ('grpc.ssl_target_name_override', tls_server_override)
+            )
+        return tuple(options)
 
     def __parse_xpath_to_json(self, xpath, namespace):
         """Parses an XPath to JSON representation, and appends
@@ -124,6 +197,30 @@ class Client(object):
                 xpath_dict = {element: xpath_dict}
         xpath_dict['namespace'] = namespace
         return json.dumps(xpath_dict)
+    
+    def __fulfill_request(self, request_method, request_args):
+        """Generically executes a gRPC RPC "request".
+        All requests follow the same control flow, thus generalization.
+
+        Parameters
+        ----------
+        request_method : def
+            Method to execute.
+        request_args : object
+            Arguments to RPC method to execute.
+        
+        Returns
+        -------
+        gRPCResponse
+            Response wrapper object with ReqID, YangData, and Errors fields.
+        """
+        return build_response(
+            request_args.ReqID,
+            request_method(request_args,
+                timeout=self.timeout,
+                metadata=self.__gen_metadata()
+            )
+        )
 
     def get_oper(self, yang_path, namespace=None, request_id=0, path_is_payload=False):
         r"""Get operational data from device.
@@ -134,7 +231,7 @@ class Client(object):
             YANG XPath which locates the datapoints.
         namespace : str, optional
             YANG namespace applicable to the specified XPath.
-        request_id : { 0, +inf }, optional
+        request_id : uint, optional
             The request ID to indicate to the device.
         path_is_payload : { True, False }, optional
             Indicates that the yang_path parameter contains a preformed JSON
@@ -142,19 +239,18 @@ class Client(object):
         
         Returns
         -------
-        response : gRPCResponse
+        gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
         if not path_is_payload:
             if not namespace:
                 raise Exception('Must include namespace if yang_path is not payload.')
             yang_path = self.__parse_xpath_to_json(yang_path, namespace)
-        message = proto.GetOperArgs(ReqID=request_id, YangPath=yang_path)
-        responses = self.__client.GetOper(message,
-            timeout=self.timeout,
-            metadata=self.__gen_metadata()
+        request_args = proto.GetOperArgs(ReqID=request_id, YangPath=yang_path)
+        return self.__fulfill_request(
+            request_method=self.__client.GetOper,
+            request_args=request_args
         )
-        return build_response(request_id, responses)
 
     def get(self, yang_path, namespace=None, request_id=0, path_is_payload=False):
         r"""Get configuration and operational data from device.
@@ -165,7 +261,7 @@ class Client(object):
             YANG XPath which locates the datapoints.
         namespace : str, optional
             YANG namespace applicable to the specified XPath.
-        request_id : { 0, +inf }, optional
+        request_id : uint, optional
             The request ID to indicate to the device.
         path_is_payload : { True, False }, optional
             Indicates that the yang_path parameter contains a preformed JSON
@@ -173,19 +269,18 @@ class Client(object):
         
         Returns
         -------
-        response : gRPCResponse
+        gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
         if not path_is_payload:
             if not namespace:
                 raise Exception('Must include namespace if yangpath is not payload.')
             yang_path = self.__parse_xpath_to_json(yang_path, namespace)
-        message = proto.GetArgs(ReqID=request_id, YangPath=yang_path)
-        responses = self.__client.Get(message,
-            timeout=self.timeout,
-            metadata=self.__gen_metadata()
+        request_args = proto.GetArgs(ReqID=request_id, YangPath=yang_path)
+        return self.__fulfill_request(
+            request_method=self.__client.Get,
+            request_args=request_args
         )
-        return build_response(request_id, responses)
 
     def get_config(self, yang_path, namespace=None, request_id=0,
             source='running', path_is_payload=False
@@ -198,7 +293,7 @@ class Client(object):
             YANG XPath which locates the datapoints.
         namespace : str, optional
             YANG namespace applicable to the specified XPath.
-        request_id : { 0, +inf }, optional
+        request_id : uint, optional
             The request ID to indicate to the device.
         source : { 'running', ? }, optional
             Source to retrieve configuration from.
@@ -208,7 +303,7 @@ class Client(object):
         
         Returns
         -------
-        response : gRPCResponse
+        gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         
         Notes
@@ -219,12 +314,11 @@ class Client(object):
             if not namespace:
                 raise Exception('Must include namespace if yang_path is not payload.')
             yang_path = self.__parse_xpath_to_json(yang_path, namespace)
-        message = proto.GetConfigArgs(ReqID=request_id, Source=source, YangPath=yang_path)
-        responses = self.__client.GetConfig(message,
-            timeout=self.timeout,
-            metadata=self.__gen_metadata()
+        request_args = proto.GetConfigArgs(ReqID=request_id, Source=source, YangPath=yang_path)
+        return self.__fulfill_request(
+            self.__client.GetConfig,
+            request_args
         )
-        return build_response(request_id, responses)
 
     def edit_config(self, yang_path,
             operation='merge', default_operation='merge', session_id=0,
@@ -240,10 +334,10 @@ class Client(object):
             Operation to perform on the configuration datastore.
         default_operation : { 'merge', 'replace', 'none' }, optional
             Default operation while traversing the configuration tree.
-        session_id : { 0, +inf }, optional
+        session_id : uint, optional
             Unique session ID acquired from start_session.
             0 indicates stateless operation.
-        request_id : { 0, +inf }, optional
+        request_id : uint, optional
             The request ID to indicate to the device.
         target : { 'running' }, optional
             Target datastore. Only 'running' is supported.
@@ -252,89 +346,86 @@ class Client(object):
         
         Returns
         -------
-        response : gRPCResponse
+        gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
-        message = proto.EditConfigArgs(
-            YangPath=yang_path, Operation=operation, SessionID=session_id, ReqID=request_id,
-            Target=target, DefOp=default_operation, ErrorOp=error_operation)
-        responses = self.__client.EditConfig(message,
-            timeout=self.timeout,
-            metadata=self.__gen_metadata()
+        request_args = proto.EditConfigArgs(
+            YangPath=yang_path, Operation=operation, SessionID=session_id,
+            ReqID=request_id, Target=target, DefOp=default_operation,
+            ErrorOp=error_operation
         )
-        return build_response(request_id, responses)
+        return self.__fulfill_request(
+            self.__client.EditConfig,
+            request_args
+        )
 
     def start_session(self, request_id=0):
         r"""Starts a new session acquiring a session ID.
 
         Parameters
         ----------
-        request_id : int, optional
+        request_id : uint, optional
             The request ID to indicate to the device.
         
         Returns
         -------
-        response : gRPCResponse
+        gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
-        message = proto.SessionArgs(ReqID=request_id)
-        responses = self.__client.StartSession(message,
-            timeout=self.timeout,
-            metadata=self.__gen_metadata()
+        request_args = proto.SessionArgs(ReqID=request_id)
+        return self.__fulfill_request(
+            self.__client.StartSession,
+            request_args
         )
-        return build_response(request_id, responses)
 
     def close_session(self, session_id, request_id=0):
         r"""Requests graceful termination of a session.
 
         Parameters
         ----------
-        session_id : { 0, +inf }
+        session_id : uint
             Unique session ID acquired from starting a session.
-        request_id : { 0, +inf }, optional
+        request_id : uint, optional
             The request ID to indicate to the device.
 
         Returns
         -------
-        response : gRPCResponse
+        gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
-        message = proto.CloseSessionArgs(ReqID=request_id, SessionID=session_id)
-        responses = self.__client.CloseSession(message,
-            timeout=self.timeout,
-            metadata=self.__gen_metadata()
+        request_args = proto.CloseSessionArgs(ReqID=request_id, SessionID=session_id)
+        return self.__fulfill_request(
+            self.__client.CloseSession,
+            request_args
         )
-        return build_response(request_id, responses)
 
     def kill_session(self, session_id, session_id_to_kill, request_id=0):
         r"""Forces the closing of a session.
 
         Parameters
         ----------
-        session_id : { 0, +inf }
+        session_id : uint
             Unique session ID acquired from starting a session.
-        session_id_to_kill : { 0, +inf }
+        session_id_to_kill : uint
             Unique session ID to kill.
-        request_id : { 0, +inf }, optional
+        request_id : uint, optional
             The request ID to indicate to the device.
         
         Returns
         -------
-        response : gRPCResponse
+        gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         
         Notes
         -----
         Not verified on whether we need to open a new session to kill a session.
         """
-        message = proto.KillArgs(
+        request_args = proto.KillArgs(
             ReqID=request_id,
             SessionID=session_id,
             SessionIDToKill=session_id_to_kill
         )
-        responses = self.__client.KillSession(
-            message,
-            timeout=self.timeout,
-            metadata=self.__gen_metadata()
+        return self.__fulfill_request(
+            self.__client.KillSession,
+            request_args
         )
-        return build_response(request_id, responses)

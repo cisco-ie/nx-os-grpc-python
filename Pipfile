@@ -9,6 +9,9 @@ googleapis-common-protos = "*"
 pylint = "*"
 
 [packages]
+grpcio = "*"
+future = "*"
+protobuf = "*"
 
 [requires]
 python_version = "3.6"
