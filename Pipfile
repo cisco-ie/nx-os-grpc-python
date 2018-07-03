@@ -10,7 +10,6 @@ pylint = "*"
 
 [packages]
 grpcio = "*"
-future = "*"
 protobuf = "*"
 
 [requires]

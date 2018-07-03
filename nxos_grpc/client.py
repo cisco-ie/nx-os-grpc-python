@@ -6,15 +6,13 @@ TODO: Exception classes.
 """
 import logging
 import json
+try:
+    from urllib.parse import urlparse
+except ImportError:
+    from urlparse import urlparse
 import grpc
 from .response import build_response
 from . import proto
-
-"""Enable urllib compatibility for Python2/3 support."""
-from future.standard_library import install_aliases
-install_aliases()
-from urllib import parse
-
 
 
 class Client(object):
@@ -126,7 +124,7 @@ class Client(object):
         """
         if netloc_prefix not in target:
             target = netloc_prefix + target
-        parsed_target = parse.urlparse(target)
+        parsed_target = urlparse(target)
         if not parsed_target.netloc:
             raise ValueError('Unable to parse netloc from target URL %s!', target)
         if parsed_target.scheme:
