@@ -14,9 +14,9 @@ def build_response(reqid, response_stream):
 
     Parameters
     ----------
-    reqid : { 0, +inf }
+    reqid : uint
         The request ID to indicate to the device.
-    response_stream : object
+    response_stream : object, iterable
         gRPC response stream to consume and assemble.
     
     Returns

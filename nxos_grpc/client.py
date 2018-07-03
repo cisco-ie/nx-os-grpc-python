@@ -7,8 +7,10 @@ TODO: Exception classes.
 import logging
 import json
 try:
+    # Python 3
     from urllib.parse import urlparse
 except ImportError:
+    # Python 2
     from urlparse import urlparse
 import grpc
 from .response import build_response
@@ -70,7 +72,7 @@ class Client(object):
     def __init__(self, target, username, password, timeout=__C_MAX_LONG,
             credentials=None, credentials_from_file=False, tls_server_override=None
         ):
-        """Initializes the gRPC client stub and defines authentication and timeout attributes.
+        r"""Initializes the gRPC client stub and defines authentication and timeout attributes.
 
         Parameters
         ----------
@@ -78,28 +80,24 @@ class Client(object):
             The host[:port] to issue gRPC requests against.
         username : str
         password : str
-        timeout : { 0, Maximum C Integer Value }, optional
+        timeout : uint, optional
             Timeout for request which sets a deadline for return.
+            Defaults to "infinity"
         credentials : str, optional
-            PEM file path or PEM file contents.
-        tls_server_override : str, optional
-            TLS server name if desired.
-        credentials_from_file : { True, False }, optional
+            PEM contents or PEM file path.
+        credentials_from_file : bool, optional
             Indicates that credentials is a file path.
-        
-        Notes
-        -----
-        Client building might be revisited.
+        tls_server_override : str, optional
+            TLS server name, if desired.
         """
+        self.username = username
+        self.password = password
+        self.timeout = int(timeout)
         self.__target = self.__gen_target(target)
-        self.__is_secure = True if credentials else False
         self.__credentials = self.__gen_credentials(
             credentials, credentials_from_file
         )
         self.__options = self.__gen_options(tls_server_override)
-        self.username = username
-        self.password = password
-        self.timeout = int(timeout)
         self.__client = self.__gen_client(
             self.__target,
             self.__credentials,
@@ -109,7 +107,7 @@ class Client(object):
     def __repr__(self):
         return json.dumps({
             'target': self.__target,
-            'is_secure': self.__is_secure,
+            'is_secure': True if self.__credentials else False,
             'username': self.username,
             'password': self.password,
             'timeout': self.timeout
@@ -145,9 +143,8 @@ class Client(object):
     
     def __gen_client(self, target, credentials=None, options=None):
         """Instantiates and returns the NX-OS gRPC client stub
-        over an insecure or secure channel. Validates target.
+        over an insecure or secure channel.
         """
-        target = self.__gen_target(target)
         client = None
         if not credentials:
             insecure_channel = grpc.insecure_channel(target)
@@ -158,7 +155,7 @@ class Client(object):
             client = proto.gRPCConfigOperStub(secure_channel)
         return client
     
-    def __gen_credentials(self, credentials, credentials_from_file=False):
+    def __gen_credentials(self, credentials, credentials_from_file):
         """Generate credentials either by reading credentials from
         the specified file or return the original creds specified.
         """
