@@ -17,10 +17,8 @@ cd nx-os-grpc-python
 pip install --user pipenv
 # Now use pipenv, source from lockfile
 pipenv --three install --dev --ignore-pipfile
-# If that doesn't work..
-pipenv --three install --dev
-# If you encounter an issue locking dependencies...
-./lock_deps.sh
+# Or use latest libraries
+./update_deps.sh
 # Enter virtual environment
 pipenv shell
 # Do your thing.
@@ -43,8 +41,15 @@ If a new `nxos_grpc.proto` definition is released, use `update_protos.sh` to rec
 ./update_protos.sh
 ```
 
-
 ## TLS Usage
 In order to use a secure channel you must acquire the necessary gRPC PEM files, `grpc.pem`. This PEM file is found with your downloaded gRPC Agent RPM. You must then specify the file path or the content of this PEM file when initializing the Client class.
 
-TODO: Where to acquire gRPC Agent RPM?  
+TODO: Where to acquire gRPC Agent RPM?
+
+## Issues
+Open an issue :)
+
+1. A potential issue that might arise is that this library uses the latest `grpcio` and `protobuf` packages whereas the NX-OS gRPC server was built against 0.11.1 which is ~2016 and lacks compatibility documentation. If an issue is encountered we will go down the rabbit hole, ignoring until then. Tracking in [#2](https://github.com/cisco-grpc-connection-libs/nx-os-grpc-python/issues/2).
+
+## Contribution
+Big thanks to Kyoung Yun for a reference client implementation.

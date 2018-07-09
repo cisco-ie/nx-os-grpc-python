@@ -1,7 +1,7 @@
 """NX-OS gRPC Python wrapper library
 Copyright 2018 Cisco Systems
 Apache v2 Licensed
-Function usage derived from example NX-OS client from BU (thanks! :)).
+Function usage derived from example NX-OS client from Kyoung Yun. Thanks :)
 TODO: Write session state management wrapper.
 TODO: Make individual returns more useful?
 TODO: Exception classes.
