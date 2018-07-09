@@ -181,6 +181,8 @@ class Client(object):
         """Parses an XPath to JSON representation, and appends
         namespace into the JSON request.
         """
+        if not namespace:
+            raise ValueError('Must include namespace if constructing from xpath!')
         xpath_dict = {}
         xpath_split = xpath.split('/')
         first = True
@@ -216,6 +218,13 @@ class Client(object):
                 metadata=self.__gen_metadata()
             )
         )
+    
+    def __validate_enum_arg(self, name, valid_options, message=None):
+        r"""Construct error around enumeration validation."""
+        if name not in valid_options:
+            if not message:
+                message = '%s must be one of %s' % (name, ', '.join(valid_options))
+            raise ValueError(message)
 
     def get_oper(self, yang_path, namespace=None, request_id=0, path_is_payload=False):
         r"""Get operational data from device.
@@ -228,7 +237,7 @@ class Client(object):
             YANG namespace applicable to the specified XPath.
         request_id : uint, optional
             The request ID to indicate to the device.
-        path_is_payload : { True, False }, optional
+        path_is_payload : bool, optional
             Indicates that the yang_path parameter contains a preformed JSON
             payload and should not be parsed into JSON as an XPath.
         
@@ -238,8 +247,6 @@ class Client(object):
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
         if not path_is_payload:
-            if not namespace:
-                raise Exception('Must include namespace if yang_path is not payload.')
             yang_path = self.__parse_xpath_to_json(yang_path, namespace)
         request_args = proto.GetOperArgs(ReqID=request_id, YangPath=yang_path)
         return self.__fulfill_request(
@@ -258,7 +265,7 @@ class Client(object):
             YANG namespace applicable to the specified XPath.
         request_id : uint, optional
             The request ID to indicate to the device.
-        path_is_payload : { True, False }, optional
+        path_is_payload : bool, optional
             Indicates that the yang_path parameter contains a preformed JSON
             payload and should not be parsed into JSON as an XPath.
         
@@ -268,8 +275,6 @@ class Client(object):
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
         if not path_is_payload:
-            if not namespace:
-                raise Exception('Must include namespace if yangpath is not payload.')
             yang_path = self.__parse_xpath_to_json(yang_path, namespace)
         request_args = proto.GetArgs(ReqID=request_id, YangPath=yang_path)
         return self.__fulfill_request(
@@ -292,7 +297,7 @@ class Client(object):
             The request ID to indicate to the device.
         source : { 'running', ? }, optional
             Source to retrieve configuration from.
-        path_is_payload : { True, False }, optional
+        path_is_payload : bool, optional
             Indicates that the yang_path parameter contains a preformed JSON
             payload and should not be parsed into JSON as an XPath.
         
@@ -305,14 +310,13 @@ class Client(object):
         -----
         Need to verify whether source param may be something other than running.
         """
+        self.__validate_enum_arg(source, {'running'})
         if not path_is_payload:
-            if not namespace:
-                raise Exception('Must include namespace if yang_path is not payload.')
             yang_path = self.__parse_xpath_to_json(yang_path, namespace)
         request_args = proto.GetConfigArgs(ReqID=request_id, Source=source, YangPath=yang_path)
         return self.__fulfill_request(
-            self.__client.GetConfig,
-            request_args
+            request_method=self.__client.GetConfig,
+            request_args=request_args
         )
 
     def edit_config(self, yang_path,
@@ -344,14 +348,18 @@ class Client(object):
         gRPCResponse
             Response wrapper object with ReqID, YangData, and Errors fields.
         """
+        self.__validate_enum_arg(operation, {'merge', 'create', 'replace', 'delete', 'remove'})
+        self.__validate_enum_arg(default_operation, {'merge', 'replace', 'none'})
+        self.__validate_enum_arg(target, {'running'})
+        self.__validate_enum_arg(error_operation, {'roll-back', 'stop', 'continue'})
         request_args = proto.EditConfigArgs(
             YangPath=yang_path, Operation=operation, SessionID=session_id,
             ReqID=request_id, Target=target, DefOp=default_operation,
             ErrorOp=error_operation
         )
         return self.__fulfill_request(
-            self.__client.EditConfig,
-            request_args
+            request_method=self.__client.EditConfig,
+            request_args=request_args
         )
 
     def start_session(self, request_id=0):
@@ -369,8 +377,8 @@ class Client(object):
         """
         request_args = proto.SessionArgs(ReqID=request_id)
         return self.__fulfill_request(
-            self.__client.StartSession,
-            request_args
+            request_method=self.__client.StartSession,
+            request_args=request_args
         )
 
     def close_session(self, session_id, request_id=0):
@@ -390,8 +398,8 @@ class Client(object):
         """
         request_args = proto.CloseSessionArgs(ReqID=request_id, SessionID=session_id)
         return self.__fulfill_request(
-            self.__client.CloseSession,
-            request_args
+            request_method=self.__client.CloseSession,
+            request_args=request_args
         )
 
     def kill_session(self, session_id, session_id_to_kill, request_id=0):
@@ -421,6 +429,6 @@ class Client(object):
             SessionIDToKill=session_id_to_kill
         )
         return self.__fulfill_request(
-            self.__client.KillSession,
-            request_args
+            request_method=self.__client.KillSession,
+            request_args=request_args
         )
