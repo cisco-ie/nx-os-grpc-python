@@ -10,7 +10,7 @@ import json
 
 
 def build_response(reqid, response_stream):
-    r"""Build a gRPCResponse from response stream.
+    """Build a gRPCResponse from response stream.
 
     Parameters
     ----------
@@ -18,7 +18,7 @@ def build_response(reqid, response_stream):
         The request ID to indicate to the device.
     response_stream : object, iterable
         gRPC response stream to consume and assemble.
-    
+
     Returns
     -------
     response_obj : object
@@ -28,7 +28,7 @@ def build_response(reqid, response_stream):
     ------
     Exception
         Response stream ReqIDs do not match.
-    
+
     Notes
     -----
     gRPCResponse does not serialize YangData or Errors with strict
@@ -36,13 +36,10 @@ def build_response(reqid, response_stream):
     """
     response_obj = gRPCResponse(reqid)
     for response in response_stream:
-        response_obj.add_data(
-            response.ReqID,
-            response.YangData,
-            response.Errors
-        )
+        response_obj.add_data(response.ReqID, response.YangData, response.Errors)
     response_obj.finalize()
     return response_obj
+
 
 class gRPCResponse(object):
     """Response wrapper. Fields accessible via dict or attribute access.
@@ -77,57 +74,64 @@ class gRPCResponse(object):
         self.errors = None
         self.Errors = self.errors
         self.__finalized = False
-        self.__yang_data_raw = ''
-        self.__errors_raw = ''
-    
+        self.__yang_data_raw = ""
+        self.__errors_raw = ""
+
     def __getitem__(self, key):
-        allowed_keys = {'ReqID', 'YangData', 'Errors'}
+        """Enable usage of attribute-like access like original data structure."""
+        allowed_keys = {"ReqID", "YangData", "Errors"}
         if key not in allowed_keys:
-            raise Exception('Key not allowed for dict-like access!')
+            raise Exception("Key not allowed for dict-like access!")
         if not self.__finalized:
-            raise Exception('Must finalize before dict representation!')
+            raise Exception("Must finalize before dict representation!")
         return self.__dict__[key]
-    
+
     def __repr__(self):
-        return json.dumps(
-            self.as_dict_raw()
-        )
-    
+        """JSON dump raw data in instance."""
+        return json.dumps(self.as_dict_raw())
+
     def __check_req_id(self, req_id):
+        """Ensures that ReqIDs are consistent per message/chunk."""
         if req_id != self.req_id:
-            raise Exception('ReqIDs in response stream do not match!')
-    
+            raise Exception("ReqIDs in response stream do not match!")
+
     def add_data(self, req_id, yang_data, errors):
+        """Adds both yang_data and errors to raw data."""
         self.add_yang_data(req_id, yang_data)
         self.add_errors(req_id, errors)
-    
+
     def add_yang_data(self, req_id, data):
         self.__check_req_id(req_id)
         self.__yang_data_raw += data
-    
+
     def add_errors(self, req_id, errors):
         self.__check_req_id(req_id)
         self.__errors_raw += errors
-    
+
     def finalize(self):
-        self.yang_data = json.loads(self.__yang_data_raw, strict=False) if self.__yang_data_raw else None
+        """Serialize raw, received data to Python dicts."""
+        self.yang_data = (
+            json.loads(self.__yang_data_raw, strict=False)
+            if self.__yang_data_raw
+            else None
+        )
         self.YangData = self.yang_data
-        self.errors = json.loads(self.__errors_raw, strict=False) if self.__errors_raw else None
+        self.errors = (
+            json.loads(self.__errors_raw, strict=False) if self.__errors_raw else None
+        )
         self.Errors = self.errors
         self.__finalized = True
-    
+
     def as_dict_raw(self):
+        """Returns the raw data representations."""
         return {
-            'ReqID': self.req_id,
-            'YangData': self.__yang_data_raw,
-            'Errors': self.__errors_raw
+            "ReqID": self.req_id,
+            "YangData": self.__yang_data_raw,
+            "Errors": self.__errors_raw,
         }
-    
+
     def as_dict(self):
+        """Returns the dict-ified data representations."""
         if not self.__finalized:
-            raise Exception('Must finalize before dict representation!')
-        return {
-            'ReqID': self.req_id,
-            'YangData': self.yang_data,
-            'Errors': self.errors
-        }
+            raise Exception("Must finalize before dict representation!")
+        return {"ReqID": self.req_id, "YangData": self.yang_data, "Errors": self.errors}
