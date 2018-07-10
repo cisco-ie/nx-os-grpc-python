@@ -103,7 +103,7 @@ setup(
     author_email=EMAIL,
     python_requires=REQUIRES_PYTHON,
     url=URL,
-    py_modules=['nxos_grpc'],
+    py_modules=['nxos_grpc',],
     install_requires=REQUIRED,
     extras_require=EXTRAS,
     include_package_data=True,
@@ -118,13 +118,13 @@ setup(
         'License :: OSI Approved :: Apache Software License',
         'Natural Language :: English',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2'
-        'Programming Language :: Python :: 2.7'
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.6',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: System :: Networking',
-        'Topic :: System :: Networking :: Monitoring'
+        'Topic :: System :: Networking :: Monitoring',
     ],
     # $ setup.py publish support.
     cmdclass={
