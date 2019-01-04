@@ -7,6 +7,7 @@ YangData and Errors data.
 TODO: Simplify?
 """
 import json
+import logging
 
 
 def build_response(reqid, response_stream):
@@ -37,7 +38,10 @@ def build_response(reqid, response_stream):
     response_obj = gRPCResponse(reqid)
     for response in response_stream:
         response_obj.add_data(response.ReqID, response.YangData, response.Errors)
-    response_obj.finalize()
+    try:
+        response_obj.finalize()
+    except json.decoder.JSONDecodeError:
+        logging.exception('Error finalizing response JSON! Returning potentially un-finalized elements.')
     return response_obj
 
 
