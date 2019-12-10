@@ -7,7 +7,7 @@ name = "pypi"
 grpcio-tools = "*"
 googleapis-common-protos = "*"
 pylint = "*"
-black = "*"
+black = "==19.3b0"
 twine = "*"
 
 [packages]

@@ -55,7 +55,9 @@ def build_response(reqid, response_stream):
     try:
         response_obj.finalize()
     except json.decoder.JSONDecodeError:
-        logging.exception('Error finalizing response JSON! Returning potentially un-finalized elements.')
+        logging.exception(
+            "Error finalizing response JSON! Returning potentially un-finalized elements."
+        )
     return response_obj
 
 
